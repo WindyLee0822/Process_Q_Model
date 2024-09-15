@@ -20,7 +20,8 @@ We validate its effectiveness through comprehensive experiments and ablation stu
 #### Main Experiments
 To reproduce experimental results of main experiments, please run
 
-```python -m torch.distributed.run --nnodes=1 --nproc_per_node=8 trian_main.py
+```
+python -m torch.distributed.run --nnodes=1 --nproc_per_node=8 trian_main.py
 ```
 
 There are some arguments you could use,
@@ -39,7 +40,8 @@ The choice [rank,orm,mse,bce] of loss-type refers to our comparative loss of PQM
 
 To reproduce experimental results of main experiments, please run
 
-```python -m torch.distributed.run --nnodes=1 --nproc_per_node=8 train_ablation.py
+```
+python -m torch.distributed.run --nnodes=1 --nproc_per_node=8 train_ablation.py
 ```
 
 There are some arguments you could use,
