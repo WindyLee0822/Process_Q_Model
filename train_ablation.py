@@ -7,13 +7,14 @@ from torch.nn.utils.rnn import pad_sequence
 from datasets import load_dataset, Dataset, load_from_disk
 from accelerate import Accelerator
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, Trainer
-from compare_wisc_model import AutoModelForCausalLMWithValueHead
+from value_model import AutoModelForCausalLMWithValueHead
 import torch
 import sys, os
 from tqdm import tqdm
 import torch.nn.functional as F
 import torch.nn as nn
 import re
+import argparse
 # transformers==4.43.0 accelerate-0.33.0
 
 def seed_everything(seed=0):
@@ -49,23 +50,18 @@ class PRMTrainer(Trainer):
                          callbacks=callbacks,
                          optimizers=optimizers,
                          preprocess_logits_for_metrics=preprocess_logits_for_metrics, )
-        self.loss_type = 'rank'
-        if self.loss_type == 'nce':
+        self.loss_type = args.loss_type
+        if self.loss_type == 'bce':
             self.loss_fn = nn.BCELoss(reduction='none')
         elif self.loss_type=='mse':
             self.loss_fn = nn.MSELoss(reduction='none')
 
 
-    def old_ranking_loss(self,rewards,labels,has_neg):
+    def theory_ranking_loss(self,rewards,labels,has_neg):
         pos_rewards_exp = torch.where(labels == 1, (rewards).exp(), 0)
-        if True:
-            neg_rewards_exp = torch.where(labels == 0, (rewards + 16).exp(), 0).flip(dims=[-1])
-            neg_reward_sum = neg_rewards_exp.sum(-1)
-        else:
-            first_error_index = torch.where(has_neg.bool(), torch.where(labels == -100, 0, labels).sum(-1), 0)
-            neg_rewards_exp = (rewards.gather(dim=-1, index=first_error_index[..., None]) + 0).exp()
-            neg_reward_sum = has_neg * neg_rewards_exp.squeeze(1)
-
+        neg_rewards_exp = torch.where(labels == 0, (rewards + args.zeta).exp(), 0).flip(dims=[-1])
+        neg_reward_sum = neg_rewards_exp.sum(-1)
+        
         #neg loss
         neg_rewards_ = torch.where(labels == 0, (rewards).exp(), 0).flip(dims=[-1])
         neg_rewards_cumsum = neg_rewards_.cumsum(-1)[:, :-1]
@@ -96,8 +92,8 @@ class PRMTrainer(Trainer):
 
     def ranking_loss(self,rewards,labels,has_neg):
         pos_rewards_exp = torch.where(labels == 1, (rewards).exp(), 0)
-        if True:
-            neg_rewards_exp = torch.where(labels == 0, (rewards+16).exp(), 0).flip(dims=[-1])
+        if self.loss_type == 'rank':
+            neg_rewards_exp = torch.where(labels == 0, (rewards+args.zeta).exp(), 0).flip(dims=[-1])
             neg_reward_sum = neg_rewards_exp.sum(-1)
         else:
             first_error_index = torch.where(has_neg.bool(),torch.where(labels==-100,0,labels).sum(-1),0)
@@ -128,7 +124,7 @@ class PRMTrainer(Trainer):
 
         rewards = rewards.gather(dim=-1,index=inputs['special_tokens'])
 
-        if self.loss_type=='nce':
+        if self.loss_type=='bce':
             rewards = rewards.sigmoid()
             loss = (self.loss_fn(rewards, torch.where(inputs['step_labels']!=-100,inputs['step_labels'],0).bfloat16()) * (inputs['step_labels']!=-100)).sum()/(inputs['step_labels']!=-100).sum()
         elif self.loss_type == 'mse':
@@ -137,8 +133,10 @@ class PRMTrainer(Trainer):
                                  torch.where(inputs['step_labels'] != -100, inputs['step_labels'], 0).bfloat16()) * (
                             inputs['step_labels'] != -100)).sum() / (inputs['step_labels'] != -100).sum()
 
-        elif self.loss_type=='rank':
-            loss = self.old_ranking_loss(rewards,inputs['step_labels'],inputs['has_neg'])
+        elif self.loss_type=='rank' or self.loss_type=='ablate-rank':
+            loss = self.ranking_loss(rewards,inputs['step_labels'],inputs['has_neg'])
+        elif self.loss_type=='theory-rank':
+            loss = self.theory_ranking_loss(rewards,inputs['step_labels'],inputs['has_neg'])
 
         return loss
 
@@ -146,7 +144,7 @@ def instruction_format(s):
     return f'[INST] {s} [/INST]'
 
 def generate_dataset(prm_token,tokenizer):
-    ds = load_from_disk("/nobackup2/windy/hf-dataset-download/Math-Shepherd")['train']
+    ds = load_from_disk(args.dataset_path)['train']
     ds = [d for d in ds]
     queries = []
     statistic = [0,0,0]
@@ -191,23 +189,28 @@ def generate_dataset(prm_token,tokenizer):
 
 
 if __name__=='__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dataset-path", type=str, default="/nobackup2/windy/hf-dataset-download/Math-Shepherd")
+    parser.add_argument("--model-path", type=str, default="/nobackup2/windy/hf-model/deepseek-math-7b-base")
+    parser.add_argument("--save-path", type=str, default="/nobackup2/windy/prm_checkpoints/neg-zeta-16")
+    parser.add_argument("--zeta", type=int, default=4)
+    parser.add_argument("--loss-type", type=str, default='rank',choices=['rank','theory-rank','ablate-rank','mse','bce'])
+    args = parser.parse_args()
+    print(args)
+
     seed_everything(0)
     accelerator = Accelerator()
     prm_token = '[PRM]'
 
-    tokenizer = AutoTokenizer.from_pretrained('/nobackup2/windy/hf-model/deepseek-math-7b-base')
-    # tokenizer = AutoTokenizer.from_pretrained('/nobackup2/windy/hf-model/internlm2-math-plus-20b')
+    tokenizer = AutoTokenizer.from_pretrained(args.model_path)
     if not tokenizer.pad_token:
         tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForCausalLM.from_pretrained('/nobackup2/windy/hf-model/deepseek-math-7b-base',
-                                                 torch_dtype=torch.bfloat16,use_flash_attention_2=True)
-    # model = AutoModelForCausalLM.from_pretrained('/u/w/i/windy/hf_checkpoints/Eurus-7b-sft',
-    #                                              torch_dtype=torch.bfloat16, use_flash_attention_2=True)
+    model = AutoModelForCausalLM.from_pretrained(args.model_path,torch_dtype=torch.bfloat16,use_flash_attention_2=True)
+
     tokenizer.add_special_tokens({'additional_special_tokens':[prm_token]})
     prm_token_id = tokenizer.encode(prm_token, add_special_tokens=False)[-1]
-    # dataset = generate_dataset(prm_token, tokenizer)
-    # dataset.save_to_disk('/nobackup2/windy/data/compare-dataset/train_dataset_hf')
-    dataset = load_from_disk('/nobackup2/windy/data/compare-dataset/train_dataset_hf')
+    dataset = generate_dataset(prm_token, tokenizer)
+    
     if accelerator.is_local_main_process:
         print(f'Data:{dataset[0]}')
         print(f'PRM_token:{prm_token}, PRM_token_id:{tokenizer.encode(prm_token, add_special_tokens=False),prm_token_id}')
@@ -257,7 +260,7 @@ if __name__=='__main__':
     }
 
     training_args = TrainingArguments(
-        output_dir="/nobackup2/windy/prm_checkpoints/neg-zeta-16",
+        output_dir=args.save_path,
         overwrite_output_dir=True,
 
         optim="adamw_torch",
