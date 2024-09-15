@@ -8,7 +8,7 @@ from torch.utils.data import DataLoader
 from datasets import load_dataset, Dataset, load_from_disk
 from accelerate import Accelerator
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, Trainer
-from compare_wisc_model import AutoModelForCausalLMWithValueHead
+from value_model import AutoModelForCausalLMWithValueHead
 import torch
 from bon_eval_utils import eval_gsm8k, eval_math_prm
 import sys, os
@@ -74,7 +74,7 @@ def compute_metrics(dataset_name, scored_results):
     if dataset_name == 'gsm8k':
         original_dataset = load_dataset('qintongli/GSM-Plus')['testmini']
     else:
-        path = '/nobackup/windy/math-testbed/MATH500.jsonl'
+        path = './MATH500.jsonl'
         with open(path) as f:
             original_dataset = [json.loads(line) for line in f]
 
@@ -144,11 +144,10 @@ if __name__=='__main__':
     parser.add_argument("--baseline", type=int, default=0)
     parser.add_argument("--combine", type=int, default=0)
     parser.add_argument("--orm", type=int, default=0)
-    parser.add_argument("--model-path", type=str, default="/nobackup2/windy/prm_checkpoints/alldata-zeta-4/checkpoint-532/model.safetensors")
-    parser.add_argument("--data-name", type=str,
-                        default="/nobackup2/windy/prm_checkpoints/alldata-zeta-4/checkpoint-532/model.safetensors")
-    parser.add_argument("--data-file", type=str,
-                        default="/nobackup2/windy/prm_checkpoints/alldata-zeta-4/checkpoint-532/model.safetensors")
+    parser.add_argument("--backbone-path", type=str, default="/nobackup2/prm_checkpoints/alldata-zeta-4/checkpoint-532/model.safetensors")
+    parser.add_argument("--model-path", type=str, default="/nobackup2/prm_checkpoints/alldata-zeta-4/checkpoint-532/model.safetensors")
+    parser.add_argument("--data-name", type=str,choices=['math','gsm8k'])
+    parser.add_argument("--data-file", type=str,required=True)
     parser.add_argument("--save-file", type=str,default="./prm-data.json")
 
     args = parser.parse_args()
@@ -159,9 +158,7 @@ if __name__=='__main__':
     accelerator = Accelerator()
     if not args.baseline:
         prm_token = '[PRM]'
-        # model_path = '/nobackup2/windy/hf-model/deepseek-math-7b-base'
-        # model_path = '/nobackup2/windy/hf-model/Qwen2-Math-1.5B'
-        model_path = '/nobackup2/windy/hf-model/metamath-7b'
+        model_path = args.backbone_path
         tokenizer = AutoTokenizer.from_pretrained(model_path)
         if not tokenizer.pad_token:
             tokenizer.pad_token = tokenizer.eos_token
@@ -178,9 +175,7 @@ if __name__=='__main__':
                     state_dict[key] = f.get_tensor(key)
         else:
             state_dict = torch.load(args.model_path)
-        # with safe_open("/nobackup2/windy/model.safetensors", framework="pt", device="cpu") as f:
-        #     for key in f.keys():
-        #         state_dict[key] = f.get_tensor(key)
+
         model.load_state_dict(state_dict)
 
         ds_engine = deepspeed.init_inference(model,
@@ -230,8 +225,6 @@ if __name__=='__main__':
 
     if data_name == 'gsm8k':
         file_list = [
-            # '/nobackup/windy/math-testbed/gsm8k-plus-metamath-mistral-128.json',
-            # '/nobackup/windy/math-testbed/gsm8k-plus-muggle-128.json'
             args.data_file,
         ]
         queries = []
@@ -259,14 +252,11 @@ if __name__=='__main__':
                 })
     elif data_name == 'math':
         file_list = [
-            # '/nobackup/windy/math-testbed/math-mistral-math-128.json',
-            # '/nobackup/windy/math-testbed/math-Eurux-8x22b-nca-128.json',
-            # '/nobackup/windy/math-testbed/math-llama3-70b-inst-128.json',
             args.data_file,
         ]
         queries = []
         cur_queries = []
-        path = '/nobackup/windy/math-testbed/MATH500.jsonl'
+        path = './MATH500.jsonl'
         with open(path) as f:
             origin_dataset = [json.loads(line) for line in f]
         for file_name in file_list:
