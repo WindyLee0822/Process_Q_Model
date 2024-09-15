@@ -5,9 +5,10 @@
 </div>
 
 
-## PQM
-
-<img src="figures/PQM.png" width="500px">
+## Introduction
+<div align="center">
+<img src="figures/PQM.png" width="822px">
+</div>
 
 We present a new framework for PRM by framing it as a $Q$-value ranking problem, providing a theoretical basis for reward modeling that captures inter-dependencies among reasoning states.
 We also show that prior classification-based PRM can be cast as a special case under our framework.
