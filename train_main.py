@@ -8,7 +8,7 @@ from torch.utils.data import IterableDataset,Dataset
 from datasets import load_dataset, load_from_disk
 from accelerate import Accelerator
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, Trainer
-from compare_wisc_model import AutoModelForCausalLMWithValueHead
+from value_model import AutoModelForCausalLMWithValueHead
 import torch
 import sys, os
 from tqdm import tqdm
