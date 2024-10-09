@@ -190,9 +190,9 @@ def generate_dataset(prm_token,tokenizer):
 
 if __name__=='__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset-path", type=str, default="/nobackup2/windy/hf-dataset-download/Math-Shepherd")
-    parser.add_argument("--model-path", type=str, default="/nobackup2/windy/hf-model/deepseek-math-7b-base")
-    parser.add_argument("--save-path", type=str, default="/nobackup2/windy/prm_checkpoints/neg-zeta-16")
+    parser.add_argument("--dataset-path", type=str, default="/nobackup/hf-dataset-download/Math-Shepherd")
+    parser.add_argument("--model-path", type=str, default="/nobackup/hf-model/deepseek-math-7b-base")
+    parser.add_argument("--save-path", type=str, default="/nobackup/prm_checkpoints/neg-zeta-16")
     parser.add_argument("--zeta", type=int, default=4)
     parser.add_argument("--loss-type", type=str, default='rank',choices=['rank','theory-rank','ablate-rank','mse','bce'])
     args = parser.parse_args()
