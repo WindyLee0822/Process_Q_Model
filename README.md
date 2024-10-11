@@ -78,7 +78,9 @@ There are some arguments you could use
 --save-file <path to save your evaluation results>
 ```
 
+### Checkpoints & Evaluation Data
 
+We release the sampling corpus of three policies and PQM checkpoints on 🤗[huggingface](https://huggingface.co/Windy0822/PQM/)
 
 
 ## Citation
