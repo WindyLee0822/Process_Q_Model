@@ -84,4 +84,14 @@ We release the sampling corpus of three policies and PQM checkpoints on 🤗[hug
 
 
 ## Citation
-To be supplemented
+```
+@misc{li2024processrewardmodelqvalue,
+      title={Process Reward Model with Q-Value Rankings}, 
+      author={Wendi Li and Yixuan Li},
+      year={2024},
+      eprint={2410.11287},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/2410.11287}, 
+}
+```
