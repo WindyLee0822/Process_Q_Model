@@ -23,7 +23,7 @@ def PQM_loss(rewards,labels,zeta=4):
     '''
     Args:
         rewards: (batch_size, padded_step_number)
-        labels: (batch_size, padded_step_number), 1-0 represents correctness-incorrectness, -100 is padding_token_id
+        labels: (batch_size, padded_step_number), 1-0 represents correctness-incorrectness, -100 is for padding
         zeta: float
 
     Returns:
