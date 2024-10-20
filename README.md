@@ -14,6 +14,42 @@ We present a new framework for PRM by framing it as a $Q$-value ranking problem,
 We also show that prior classification-based PRM can be cast as a special case under our framework.
 We validate its effectiveness through comprehensive experiments and ablation studies on a wide range of sampling policies, LLM backbones, and different test sets. 
 
+## Loss Function
+
+If you would like to deploy PQM loss to your codes, you can directly use the following loss function:
+
+```
+def PQM_loss(rewards,labels,zeta=4):
+    '''
+    Args:
+        rewards: (batch_size, padded_step_number)
+        labels: (batch_size, padded_step_number), 1-0 represents correctness-incorrectness, -100 is padding_token_id
+        zeta: float
+
+    Returns:
+        loss: float
+
+    '''
+    has_neg = (labels==0).sum(-1).bool()
+    pos_rewards_exp = torch.where(labels == 1, (rewards).exp(), 0)
+    neg_rewards_exp = torch.where(labels == 0, (rewards+zeta).exp(), 0).flip(dims=[-1])
+    neg_reward_sum = neg_rewards_exp.sum(-1)
+
+    pos_rewards_ = torch.where(labels == 1, (rewards).exp(), 0)
+    pos_rewards_cumsum = torch.cat(
+        [torch.zeros(rewards.shape[0], 1, device=rewards.device), pos_rewards_.cumsum(-1)[:, 1:]], dim=1)
+
+    reward_exp_cur = torch.where(labels == 1, pos_rewards_exp, 1)
+    reward_exp_cur = torch.cat([torch.zeros(rewards.shape[0], 1, device=rewards.device).exp(), reward_exp_cur],
+                               dim=-1)
+    pos_rewards_cumsum = torch.cat([torch.zeros(rewards.shape[0], 1, device=rewards.device),
+                                    pos_rewards_cumsum + torch.zeros(rewards.shape[0], 1,
+                                                                     device=rewards.device).exp()], dim=-1)
+    loss = -torch.log(reward_exp_cur / (reward_exp_cur + pos_rewards_cumsum + neg_reward_sum[..., None] + 1e-5))
+    labels = torch.cat([has_neg[...,None], labels], dim=-1)
+    loss = (torch.where(labels == 1, loss, 0).sum(-1) / torch.where(labels == 1, 1, 0).sum(-1)).mean()
+    return loss
+```
 
 ## Reproduction
 
