@@ -63,20 +63,17 @@ class PRMTrainer(Trainer):
         neg_rewards_exp = torch.where(labels == 0, (rewards+args.zeta).exp(), 0).flip(dims=[-1])
         neg_reward_sum = neg_rewards_exp.sum(-1)
 
-        pos_rewards_ = torch.where(labels == 1, (rewards).exp(), 0)
-        pos_rewards_cumsum = torch.cat(
-            [torch.zeros(rewards.shape[0], 1, device=rewards.device), pos_rewards_.cumsum(-1)[:, 1:]], dim=1)
+        pos_rewards_cumsum = torch.cat([torch.zeros(rewards.shape[0], 1, device=rewards.device).exp(), pos_rewards_exp],
+                                       dim=1).cumsum(-1)[:, :-1]
+        pos_rewards_cumsum = torch.cat([torch.zeros(rewards.shape[0], 1, device=rewards.device), pos_rewards_cumsum],
+                                       dim=-1)
 
         reward_exp_cur = torch.where(labels == 1, pos_rewards_exp, 1)
-        reward_exp_cur = torch.cat([torch.zeros(rewards.shape[0], 1, device=rewards.device).exp(), reward_exp_cur],
-                                   dim=-1)
-        pos_rewards_cumsum = torch.cat([torch.zeros(rewards.shape[0], 1, device=rewards.device),
-                                        pos_rewards_cumsum + torch.zeros(rewards.shape[0], 1,
-                                                                         device=rewards.device).exp()], dim=-1)
-        # bmt.print_rank('shape',reward_exp_cur,pos_rewards_cumsum,neg_reward_sum)
+        reward_exp_cur = torch.cat([torch.zeros(rewards.shape[0], 1, device=rewards.device).exp(), reward_exp_cur], dim=-1)
+
         loss = -torch.log(reward_exp_cur / (reward_exp_cur + pos_rewards_cumsum + neg_reward_sum[..., None] + 1e-5))
 
-        labels = torch.cat([has_neg[...,None], labels], dim=-1)
+        labels = torch.cat([has_neg[..., None], labels], dim=-1)
         loss = (torch.where(labels == 1, loss, 0).sum(-1) / torch.where(labels == 1, 1, 0).sum(-1)).mean()
         return loss
 
@@ -106,22 +103,7 @@ class PRMTrainer(Trainer):
         return loss
 
 def instruction_format(s):
-
-    # return f'[INST] {s} [/INST]'
-
-    #deepseek-rl
-    # messages = [
-    #     {"role": "user",
-    #      "content": s+'\n'+r"Please reason step by step, and put your final answer within \boxed{}."}
-    # ]
-
-    # messages = [
-    #     {"role": "user",
-    #      "content": s }
-    # ]
-    # return tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
-
-    return f"Below is an instruction that describes a task.\nWrite a response that appropriately completes the request.\n\n### Instruction:\n{s}\n\n### Response: Let's think step by step"
+    return f'[INST] {s} [/INST]'
 
 def generate_dataset(prm_token,tokenizer):
     ds = load_from_disk(args.dataset_path)['train']
