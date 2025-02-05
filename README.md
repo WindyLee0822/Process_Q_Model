@@ -39,18 +39,17 @@ def PQM_loss(rewards,labels,zeta=4):
     neg_rewards_exp = torch.where(labels == 0, (rewards+zeta).exp(), 0).flip(dims=[-1])
     neg_reward_sum = neg_rewards_exp.sum(-1)
 
-    pos_rewards_ = torch.where(labels == 1, (rewards).exp(), 0)
-    pos_rewards_cumsum = torch.cat(
-        [torch.zeros(rewards.shape[0], 1, device=rewards.device), pos_rewards_.cumsum(-1)[:, 1:]], dim=1)
+    pos_rewards_cumsum = torch.cat([torch.zeros(rewards.shape[0], 1, device=rewards.device).exp(), pos_rewards_exp],
+                                   dim=1).cumsum(-1)[:, :-1]
+    pos_rewards_cumsum = torch.cat([torch.zeros(rewards.shape[0], 1, device=rewards.device), pos_rewards_cumsum],
+                                   dim=-1)
 
     reward_exp_cur = torch.where(labels == 1, pos_rewards_exp, 1)
-    reward_exp_cur = torch.cat([torch.zeros(rewards.shape[0], 1, device=rewards.device).exp(), reward_exp_cur],
-                               dim=-1)
-    pos_rewards_cumsum = torch.cat([torch.zeros(rewards.shape[0], 1, device=rewards.device),
-                                    pos_rewards_cumsum + torch.zeros(rewards.shape[0], 1,
-                                                                     device=rewards.device).exp()], dim=-1)
+    reward_exp_cur = torch.cat([torch.zeros(rewards.shape[0], 1, device=rewards.device).exp(), reward_exp_cur], dim=-1)
+
     loss = -torch.log(reward_exp_cur / (reward_exp_cur + pos_rewards_cumsum + neg_reward_sum[..., None] + 1e-5))
-    labels = torch.cat([has_neg[...,None], labels], dim=-1)
+
+    labels = torch.cat([has_neg[..., None], labels], dim=-1)
     loss = (torch.where(labels == 1, loss, 0).sum(-1) / torch.where(labels == 1, 1, 0).sum(-1)).mean()
     return loss
 ```
@@ -103,7 +102,7 @@ The choice [rank,theory-rank,ablate-rank] of loss-type refers to the practical v
 To obtain the Best-of-N results of PQM, please run
 
 ```
-CUDA_VISIBLE_DEVICES=2,3 nohup deepspeed bon_eval_hf.py 
+CUDA_VISIBLE_DEVICES=2,3 deepspeed bon_eval_hf.py 
 ```
 
 There are some arguments you could use
@@ -117,6 +116,21 @@ There are some arguments you could use
 --baseline <1 when obtaining self-consistency and pass@k, otherwise 0>
 --save-file <path to save your evaluation results>
 ```
+### Sample Testset
+
+To obtain the Best-of-N testsets, please run
+```
+python sample_testset.py 
+```
+There are some arguments you could use
+```
+--tokenizer_path <the tokenizer path of the sampling model>
+--model-path <the path of the sampling model>
+--dataset <select from [math,gsm8k-plus]>
+--repeat-num <the sampling times per question, default to 128>
+--save-path <path to save the sampling results> 
+```
+
 
 ### Checkpoints & Evaluation Data
 
