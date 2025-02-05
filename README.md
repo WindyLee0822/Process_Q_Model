@@ -4,6 +4,10 @@
 
 </div>
 
+## Updated News
+
+- **[2025/01/21]** Our paper is accepted at ICLR 2025.🎉 
+- **[2024/10/20]** We release our [paper](https://arxiv.org/pdf/2410.11287) and codes.
 
 ## Introduction
 <div align="center">
